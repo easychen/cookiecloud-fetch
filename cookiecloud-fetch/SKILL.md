@@ -1,194 +1,75 @@
 ---
 name: cookiecloud-fetch
-description: Fetch authenticated web content using CookieCloud session cookies injected into Cloudflare Browser Run. Use when a target website requires login or has strong anti-scraping/bot-detection measures. Automatically pulls matching cookies from CookieCloud for the target domain and passes them to Browser Run.
+description: Fetch authenticated web content by injecting CookieCloud session cookies into Cloudflare Browser Run. Use this skill whenever a website requires login or has anti-scraping measures — social media feeds, SaaS dashboards, paywalled content, or any page that returns different content when logged in. Triggers on requests like "scrape this page (need to be logged in)", "fetch my xiaohongshu/weibo/bilibili feed", "take a screenshot of my dashboard", "extract data from a site that requires login", or any URL that needs a real user session.
 allowed-tools:
   - Bash
 ---
 
 # CookieCloud + Browser Run Authenticated Fetch
 
-Use this skill whenever a website blocks unauthenticated access or needs a real login session to return useful content.
+Pulls session cookies from CookieCloud, injects them into Cloudflare Browser Run, and returns the rendered page as if the user were logged in.
 
 ## Step 1 — Check Configuration
 
 ```bash
 source ~/.zshrc 2>/dev/null
-_CC_URL="${COOKIECLOUD_URL:-}"
-_CC_UUID="${COOKIECLOUD_UUID:-}"
-_CC_PASS="${COOKIECLOUD_PASSWORD:-}"
-_CF_ACCOUNT="${CF_ACCOUNT_ID:-}"
-_CF_TOKEN="${CF_API_TOKEN:-}"
+missing=()
+[ -z "$COOKIECLOUD_URL" ]    && missing+=(COOKIECLOUD_URL)
+[ -z "$COOKIECLOUD_UUID" ]   && missing+=(COOKIECLOUD_UUID)
+[ -z "$COOKIECLOUD_PASSWORD" ] && missing+=(COOKIECLOUD_PASSWORD)
+[ -z "$CF_ACCOUNT_ID" ]      && missing+=(CF_ACCOUNT_ID)
+[ -z "$CF_API_TOKEN" ]       && missing+=(CF_API_TOKEN)
 
-if [ -z "$_CC_URL" ] || [ -z "$_CC_UUID" ] || [ -z "$_CC_PASS" ] || \
-   [ -z "$_CF_ACCOUNT" ] || [ -z "$_CF_TOKEN" ]; then
-  echo "MISSING_CONFIG"
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "MISSING: ${missing[*]}"
 else
   echo "OK"
 fi
 ```
 
-If output is `MISSING_CONFIG`, tell the user to add the following to `~/.zshrc`:
+If any variables are missing, ask the user to add them to `~/.zshrc`:
 
 ```bash
-# CookieCloud
-export COOKIECLOUD_URL="http://localhost:8088"
-export COOKIECLOUD_UUID="your-uuid-here"
-export COOKIECLOUD_PASSWORD="your-password-here"
-
-# Cloudflare Browser Run
-export CF_ACCOUNT_ID="your-cloudflare-account-id"
-export CF_API_TOKEN="your-cloudflare-api-token"
+export COOKIECLOUD_URL="http://localhost:8088"    # CookieCloud server
+export COOKIECLOUD_UUID="your-uuid"               # from extension settings
+export COOKIECLOUD_PASSWORD="your-password"       # from extension settings
+export CF_ACCOUNT_ID="your-account-id"            # Cloudflare Dashboard sidebar
+export CF_API_TOKEN="your-api-token"              # Account / Browser Rendering / Edit
 ```
 
-Then run `source ~/.zshrc` and invoke this skill again.
+Then `source ~/.zshrc` and retry.
 
-How to get the values:
-- `COOKIECLOUD_URL` / `UUID` / `PASSWORD` — from the CookieCloud browser extension settings page
-- `CF_ACCOUNT_ID` — Cloudflare Dashboard → right sidebar
-- `CF_API_TOKEN` — Cloudflare Dashboard → My Profile → API Tokens → Create Token → Custom Token → Permission: `Account / Browser Rendering / Edit`
+## Step 2 — Fetch
 
-## Step 2 — Fetch and Render
-
-Replace `TARGET_URL` with the actual URL. Set `ENDPOINT` to one of: `content` (HTML), `markdown`, `screenshot`, `json`.
+Locate the skill's `scripts/fetch.js` — it will be under `~/.claude/skills/cookiecloud-fetch/scripts/fetch.js` (user install) or `.claude/skills/cookiecloud-fetch/scripts/fetch.js` (project install). Then run:
 
 ```bash
 source ~/.zshrc 2>/dev/null
+
+# Set these before running:
 TARGET_URL="https://example.com/page"
-ENDPOINT="markdown"
+ENDPOINT="markdown"   # markdown | content | screenshot | json | links
 
-node - <<'JSEOF' "$TARGET_URL" "$ENDPOINT"
-const crypto = require('crypto');
-const https  = require('https');
-const http   = require('http');
-const fs     = require('fs');
-const { URL } = require('url');
-
-const ccUrl   = process.env.COOKIECLOUD_URL.replace(/\/$/, '');
-const uuid    = process.env.COOKIECLOUD_UUID;
-const pass    = process.env.COOKIECLOUD_PASSWORD;
-const account = process.env.CF_ACCOUNT_ID;
-const token   = process.env.CF_API_TOKEN;
-const targetUrl  = process.argv[2];
-const endpoint   = process.argv[3] || 'markdown';
-
-// Extract domain (strip www.)
-const domain = new URL(targetUrl).hostname.replace(/^www\./, '');
-
-const VALID_SAME_SITE = new Set(['Strict', 'Lax', 'None']);
-function normalizeSameSite(v) {
-  if (!v) return 'Lax';
-  const s = v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
-  return VALID_SAME_SITE.has(s) ? s : 'Lax';
-}
-
-function decrypt(encrypted) {
-  const hash = crypto.createHash('md5').update(`${uuid}-${pass}`).digest('hex');
-  const key  = Buffer.from(hash.substring(0, 16), 'utf8');
-  const iv   = Buffer.alloc(16, 0);
-  const dec  = crypto.createDecipheriv('aes-128-cbc', key, iv);
-  let out = dec.update(Buffer.from(encrypted, 'base64'));
-  return JSON.parse(Buffer.concat([out, dec.final()]).toString('utf8'));
-}
-
-function get(url) {
-  return new Promise((resolve, reject) => {
-    const lib = url.startsWith('https') ? https : http;
-    lib.get(url, res => { let b=''; res.on('data',d=>b+=d); res.on('end',()=>resolve(b)); }).on('error', reject);
-  });
-}
-
-function post(payload) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(payload);
-    const req = https.request({
-      hostname: 'api.cloudflare.com',
-      path: `/client/v4/accounts/${account}/browser-rendering/${endpoint}`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-      }
-    }, res => { let b=''; res.on('data',d=>b+=d); res.on('end',()=>resolve(JSON.parse(b))); });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
-}
-
-(async () => {
-  // 1. Fetch + decrypt CookieCloud
-  const raw  = JSON.parse(await get(`${ccUrl}/get/${uuid}`));
-  const data = decrypt(raw.encrypted);
-  const cookieData = data.cookie_data || {};
-
-  // 2. Match cookies for target domain
-  let matched = [];
-  for (const k of [domain, `.${domain}`]) {
-    if (cookieData[k]) { matched = cookieData[k]; break; }
-  }
-
-  if (!matched.length) {
-    console.error(`⚠️  No cookies found for "${domain}". Open the site in your browser and let CookieCloud sync, then retry.`);
-    process.exit(1);
-  }
-  console.error(`✓ ${matched.length} cookies for ${domain}`);
-
-  // 3. Normalize cookies for Browser Run
-  const cookies = matched.map(c => ({
-    name:     c.name,
-    value:    c.value,
-    domain:   c.domain || domain,
-    path:     c.path || '/',
-    expires:  c.expirationDate,
-    httpOnly: c.httpOnly || false,
-    secure:   c.secure || false,
-    sameSite: normalizeSameSite(c.sameSite),
-  }));
-
-  // 4. Call Browser Run
-  const result = await post({
-    url: targetUrl,
-    cookies,
-    gotoOptions: { waitUntil: 'networkidle2' },
-  });
-
-  if (!result.success) {
-    console.error('Browser Run error:', JSON.stringify(result.errors));
-    process.exit(1);
-  }
-
-  if (endpoint === 'screenshot') {
-    const out = '/tmp/browserrun_screenshot.png';
-    fs.writeFileSync(out, Buffer.from(result.result, 'base64'));
-    console.log(`Screenshot saved to ${out}`);
-  } else {
-    console.log(result.result);
-  }
-})();
-JSEOF
+SCRIPT=$(find ~/.claude .claude -path "*/cookiecloud-fetch/scripts/fetch.js" 2>/dev/null | head -1)
+node "$SCRIPT" "$TARGET_URL" "$ENDPOINT"
 ```
 
-## 限制：localStorage 不支持
+Diagnostic lines (cookie count, errors) go to stderr. The page content goes to stdout.
 
-本 skill 只注入 `cookie_data`，不注入 `local_storage_data`。Browser Run Quick Actions 不支持直接传入 localStorage，如目标站点依赖 localStorage 维持登录态，需改用 Playwright Workers binding。
+## Endpoints
 
-## Endpoint Reference
+| Endpoint | Returns |
+|----------|---------|
+| `markdown` | Markdown — best for reading or passing to an LLM |
+| `content` | Full rendered HTML |
+| `screenshot` | PNG saved to `/tmp/browserrun_screenshot.png` |
+| `json` | AI-extracted structured data |
+| `links` | All hyperlinks on the page |
 
-| Endpoint | Returns | Best for |
-|----------|---------|---------|
-| `markdown` | Markdown text | Reading content, feeding to LLM |
-| `content` | Full rendered HTML | Parsing with selectors |
-| `screenshot` | PNG saved to `/tmp/browserrun_screenshot.png` | Visual verification |
-| `json` | AI-extracted structured data | Add `"schema": {...}` to payload |
-| `links` | All hyperlinks | Link discovery |
+## No cookies found?
 
-## Environment Variable Summary
+If the script exits with `No cookies found for "domain"`, the user hasn't logged into that site since the CookieCloud extension was installed, or the extension hasn't synced yet. Ask them to open the site in their browser and trigger a manual sync from the extension popup.
 
-| Variable | Description |
-|---|---|
-| `COOKIECLOUD_URL` | CookieCloud server URL, e.g. `http://localhost:8088` |
-| `COOKIECLOUD_UUID` | UUID from the CookieCloud extension settings |
-| `COOKIECLOUD_PASSWORD` | Encryption password from the extension |
-| `CF_ACCOUNT_ID` | Cloudflare account ID |
-| `CF_API_TOKEN` | Cloudflare API Token with Browser Rendering Edit permission |
+## Limitation
+
+Only `cookie_data` is injected. `local_storage_data` is not — Browser Run Quick Actions don't support localStorage injection. Sites that store auth tokens exclusively in localStorage won't work with this skill.
