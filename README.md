@@ -30,7 +30,9 @@ Cloudflare Browser Run（边缘 Chromium）
 3. 在扩展设置页记下 **Server URL**、**UUID**、**Password**
 
 注意使用 CookieCloud 的 **Fixed IV** 模式（`aes-128-cbc-fixed`）
+
 <img width="332" height="531" alt="image" src="https://github.com/user-attachments/assets/72ef324c-7927-4377-a72a-e85431d280e6" />
+
 
 
 ### Cloudflare Browser Run
