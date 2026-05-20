@@ -22,14 +22,17 @@ Cloudflare Browser Run（边缘 Chromium）
 
 ### CookieCloud
 
-1. 部署服务端（Docker 一键启动）：
-   ```bash
-   docker run -d -p 8088:8088 easychen/cookiecloud:latest
-   ```
-2. 在 Chrome/Edge 中安装 [CookieCloud 扩展](https://github.com/easychen/CookieCloud)
-3. 在扩展设置页记下 **Server URL**、**UUID**、**Password**
+**快速体验**：可直接使用官方公共测试服务器 `https://ccc.ft07.com`，无需自己部署。
 
-注意使用 CookieCloud 的 **Fixed IV** 模式（`aes-128-cbc-fixed`）
+**自托管**（推荐生产使用）：
+```bash
+docker run -d -p 8088:8088 easychen/cookiecloud:latest
+```
+
+然后：
+1. 在 Chrome/Edge 中安装 [CookieCloud 扩展](https://github.com/easychen/CookieCloud)
+2. 在扩展设置页填入服务器地址，记下 **UUID** 和 **Password**
+3. 加密模式选择 **Fixed IV**（`aes-128-cbc-fixed`）
 
 <img width="332" height="531" alt="image" src="https://github.com/user-attachments/assets/72ef324c-7927-4377-a72a-e85431d280e6" />
 
@@ -61,7 +64,25 @@ export CF_API_TOKEN="your-api-token"
 
 ## 安装 Skill
 
-下载 [`cookiecloud-fetch.skill`](./cookiecloud-fetch.skill)，双击安装（需已安装 Claude Code），或：
+### 方式一：npx skills（推荐，适用所有支持 Agent Skills 的 AI 工具）
+
+在项目目录下运行（项目级安装）：
+
+```bash
+npx skills add easychen/cookiecloud-fetch
+```
+
+或全局安装（对所有项目生效）：
+
+```bash
+npx skills add easychen/cookiecloud-fetch --global
+```
+
+安装完成后 skill 会自动同步到 Claude Code、Cursor、Codex 等支持 Agent Skills 标准的工具。
+
+### 方式二：Claude Code .skill 文件
+
+下载 [`cookiecloud-fetch.skill`](./cookiecloud-fetch.skill) 后双击（需已安装 Claude Code），或：
 
 ```bash
 claude skill install cookiecloud-fetch.skill
