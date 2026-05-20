@@ -104,16 +104,3 @@ const cookie = {
 |------|---------|---------|
 | Workers Free | 10 分钟/天，3 并发 | 不可扩容 |
 | Workers Paid | 10 小时/月，均值 10 并发 | $0.09/浏览器小时 |
-
----
-
-## 已验证站点
-
-在以下域名实测通过：
-
-- 小红书（xiaohongshu.com）
-- 微博（weibo.com / weibo.cn）
-- X / Twitter（x.com）
-- B 站（bilibili.com）
-- 抖音（douyin.com）
-- 掘金（juejin.cn）
