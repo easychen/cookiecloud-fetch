@@ -107,10 +107,10 @@ Skill 会自动：
 ## 文件说明
 
 ```
-cookiecloud-fetch.skill          # 可分发的 skill 安装包
-.claude/skills/cookiecloud-fetch/
-└── SKILL.md                     # Skill 源文件
-CookieCloudRun.md                # 技术调研报告（背景阅读）
+cookiecloud-fetch/
+└── SKILL.md          # Skill 源文件（skills.sh 标准目录结构）
+cookiecloud-fetch.skill           # 打包好的 skill 安装文件
+CookieCloudRun.md                 # 技术说明文档
 ```
 
 ## License

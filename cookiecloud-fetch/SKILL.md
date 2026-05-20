@@ -169,6 +169,10 @@ function post(payload) {
 JSEOF
 ```
 
+## 限制：localStorage 不支持
+
+本 skill 只注入 `cookie_data`，不注入 `local_storage_data`。Browser Run Quick Actions 不支持直接传入 localStorage，如目标站点依赖 localStorage 维持登录态，需改用 Playwright Workers binding。
+
 ## Endpoint Reference
 
 | Endpoint | Returns | Best for |
